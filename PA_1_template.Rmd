@@ -1,0 +1,130 @@
+---
+title: "ReproducibleResearch_PeerAssignment"
+author: "Grant McClure"
+date: "2/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Read in the data
+
+```{r}
+library("data.table")
+library(ggplot2)
+setwd("/Users/grmcclure/OneDrive - Red Ventures/Documents/Projects/dsa/")
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(fileUrl, destfile = paste0(getwd(), '/repdata%2Fdata%2Factivity.zip'), method = "curl")
+unzip("repdata%2Fdata%2Factivity.zip",exdir = "data")
+
+data <- read.csv("data/activity.csv")  
+```
+
+## What is mean total number of steps taken per day?
+1) Calculate the total number of steps taken per day
+2) If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
+3) Calculate and report the mean and median of the total number of steps taken per day
+
+``` {r}
+#total mean steps per day
+stepsPerDay <- aggregate(steps ~ date, data, sum)
+hist(stepsPerDay$steps, main = paste("Total Steps Each Day"),col = "blue",xlab="Number of Steps")
+
+meanOfSteps <- mean(stepsPerDay$steps)
+meanOfSteps
+medianOfSteps <- median(stepsPerDay$steps)
+medianOfSteps
+```
+
+## What is the average daily activity pattern?
+
+1) Make a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+2) Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+``` {r}
+#average daily activity pattern
+
+stepsPerInterval <- aggregate(steps ~ interval, data, mean)
+plot(stepsPerInterval$interval,stepsPerInterval$steps, type="l", xlab="Interval", 
+     ylab="Number of Steps",main="Average Number of Steps by day for each Interval")
+
+maxInterval <- stepsPerInterval[which.max(stepsPerInterval$steps),1]
+maxInterval
+```
+
+## Imputing missing values
+
+```{r}
+#imputing missing values
+
+#number of missing values
+nrow(data[is.na(data$steps),])
+
+#get rid of na's by replacing with mean
+StepsAverage <- aggregate(steps ~ interval, data = data, FUN = mean)
+fixSteps <- numeric()
+for (i in 1:nrow(data)) {
+  row <- data[i, ]
+  if (is.na(row$steps)) {
+    steps <- subset(StepsAverage, interval == row$interval)$steps
+  } else {
+    steps <- row$steps
+  }
+  fixSteps <- c(fixSteps, steps)
+}
+
+finalData <- data
+finalData$steps <- fixSteps
+
+stepsAllIn <- aggregate(steps ~ date, data = finalData, sum, na.rm = TRUE)
+hist(stepsAllIn$steps, main = paste("Total Steps Each Day"), col="blue", xlab="Number of Steps")
+#Create Histogram to show difference. 
+hist(stepsPerDay$steps, main = paste("Total Steps Each Day"), col="red", xlab="Number of Steps", add=T)
+legend("topright", c("Imputed", "Non-imputed"), col=c("blue", "red"), lwd=10)
+
+#calculate mean
+meanAllIn <- mean(stepsAllIn$steps)
+meanAllIn
+medianAllIn <- median(stepsAllIn$steps)
+medianAllIn
+
+medianDiff <- medianAllIn - medianOfSteps
+medianDiff
+meanDiff <- meanAllIn - meanOfSteps
+meanDiff
+
+#difference seen in the 10000--15000 bucket, which is what we'd expect since we replaced nulls with the mean
+```
+
+## Are there differences in activity patterns between weekdays and weekends?
+``` {r}
+#differences between weekends and weekdays?
+finalData$weekday <- c("weekday")
+finalData[weekdays(as.Date(finalData[, 2])) %in% c("Saturday", "Sunday", "samedi", "dimanche", "saturday", "sunday", "Samedi", "Dimanche"), ][4] <- c("weekend")
+table(finalData$weekday == "weekend")
+finalData$weekday <- factor(finalData$weekday)
+
+finalData_weekend <- subset(finalData, finalData$weekday == "weekend")
+finalData_weekday <- subset(finalData, finalData$weekday == "weekday")
+
+mean_finalData_weekday <- tapply(finalData_weekday$steps, finalData_weekday$interval, mean)
+mean_finalData_weekend <- tapply(finalData_weekend$steps, finalData_weekend$interval, mean)
+
+library(lattice)
+df_weekday <- NULL
+df_weekend <- NULL
+df_final <- NULL
+df_weekday <- data.frame(interval = unique(finalData_weekday$interval), 
+                         avg = as.numeric(mean_finalData_weekday), 
+                         day = rep("weekday", length(mean_finalData_weekday)))
+df_weekend <- data.frame(interval = unique(finalData_weekend$interval), 
+                         avg = as.numeric(mean_finalData_weekend), 
+                         day = rep("weekend", length(mean_finalData_weekend)))
+df_final <- rbind(df_weekday, df_weekend)
+
+xyplot(avg ~ interval | day, data = df_final, layout = c(1, 2), 
+       type = "l", ylab = "Number of steps")
+```
+
